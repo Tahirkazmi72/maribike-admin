@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MariaBike Admin</title>
+  <link rel="icon" href="favicon.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <link rel="stylesheet" href="style.css?v=20261107n">
+</head>
+<body>
+  <header class="bar">
+    <img src="logo.png" alt="MariaBike" class="logo">
+    <span class="title">Admin</span>
+    <span id="who" class="who"></span>
+    <div class="notif">
+      <button id="notifBell" type="button" class="ghost small icon" hidden aria-label="Alarms" aria-haspopup="true" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+        <span id="notifCount" class="badge" hidden>0</span>
+      </button>
+      <div id="notifPanel" class="notif-panel" hidden>
+        <div class="notif-head"><strong>Alarms today</strong><span id="notifSummary" class="muted"></span></div>
+        <ul id="notifList"></ul>
+        <div class="notif-foot">
+          <button id="soundToggle" type="button" class="ghost small">Alarm sound: on</button>
+          <span id="soundNote" class="muted"></span>
+        </div>
+      </div>
+    </div>
+    <span id="session" class="session" hidden title="Time left in this session">Session 15:00</span>
+    <button id="extend" type="button" class="ghost small" hidden title="Start another 15 minutes">Extend</button>
+    <button id="logout" class="ghost" hidden>Sign out</button>
+  </header>
+
+  <section id="login" class="card narrow" hidden>
+    <h1>Sign in</h1>
+    <p class="muted">Use your MariaBike admin account.</p>
+    <form id="loginForm">
+      <label>Email <input id="email" type="email" autocomplete="username" required></label>
+      <label>Password <input id="password" type="password" autocomplete="current-password" required></label>
+      <button type="submit">Sign in</button>
+      <p id="loginError" class="error"></p>
+    </form>
+  </section>
+
+  <section id="denied" class="card narrow" hidden>
+    <h1>No access</h1>
+    <p>This account is not an admin. Ask an admin to give you the admin role.</p>
+  </section>
+
+  <main id="app" hidden>
+    <div id="alarmBanner" class="banner alarm" role="alert" hidden>
+      <span id="alarmBannerText"></span>
+      <button id="alarmOpen" type="button" class="small">Open bike</button>
+      <button id="alarmDismiss" type="button" class="ghost small">Dismiss</button>
+    </div>
+    <section class="tiles">
+      <div class="tile"><span id="tBikes">0</span><small>Bikes</small></div>
+      <div class="tile"><span id="tOnline">0</span><small>Online</small></div>
+      <div class="tile"><span id="tAlarms">0</span><small>Alarms today</small></div>
+      <div class="tile"><span id="tLow">0</span><small>Need charging</small></div>
+      <div class="tile"><span id="tOpen">0</span><small>Open reports</small></div>
+      <div class="tile"><span id="tSilent">0</span><small>No contact for 1 h</small></div>
+    </section>
+
+    <nav class="tabs">
+      <button data-tab="bikes" class="active">Bikes</button>
+      <button data-tab="rides">Rides</button>
+      <button data-tab="reports">Reports</button>
+      <button data-tab="users">Users</button>
+      <button data-tab="locks">Locks</button>
+      <button data-tab="stats">Stats</button>
+      <button data-tab="area">Service area</button>
+      <button data-tab="log">Admin log</button>
+    </nav>
+
+    <!-- Bikes: live map, table and one bike's controls -->
+    <section id="tab-bikes" class="tab">
+      <div id="map" class="map"></div>
+      <div class="card">
+        <div class="row">
+          <input id="bikeSearch" class="search" placeholder="Search rider, email, lock or IMEI">
+          <select id="bikeFilter">
+            <option value="all">All bikes</option>
+            <option value="online">Online</option>
+            <option value="offline">Offline</option>
+            <option value="silent">No contact for 1 h</option>
+            <option value="low">Need charging</option>
+            <option value="outside">Outside the area</option>
+          </select>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Bike</th><th>Rider</th><th>Status</th><th>Lock</th><th>Battery</th><th>Signal</th>
+            <th>Area</th><th>Location</th><th>Last update</th><th></th>
+          </tr></thead>
+          <tbody id="bikeRows"></tbody>
+        </table>
+        <p id="noBikes" class="muted">No bike has connected to the server yet.</p>
+      </div>
+
+      <div id="bike" class="card" hidden>
+        <div class="row"><h2 id="bikeTitle"></h2><button id="bikeClose" class="ghost small">Close</button></div>
+        <h3>Live data</h3>
+        <div id="bikeLive" class="tiles inner"></div>
+        <p id="bikeLiveNote" class="muted"></p>
+        <h3>Data history</h3>
+        <div class="row">
+          <input id="histDay" type="date" class="short">
+          <select id="histDays">
+            <option value="1">1 day</option><option value="7">7 days</option><option value="30">30 days</option>
+          </select>
+          <button id="histCsv" class="ghost small" type="button">Download CSV</button>
+        </div>
+        <p id="histNote" class="muted"></p>
+        <div id="histCharts" class="grid"></div>
+        <div class="grid">
+          <div>
+            <h3>Find</h3>
+            <button data-cmd="locate">Locate</button>
+            <button data-cmd="beep">Beep</button>
+            <h3>Tracking</h3>
+            <p class="muted">The bike sends its position every N seconds (uses battery and data).</p>
+            <select id="trackEvery">
+              <option value="30">every 30 s</option><option value="60" selected>every 1 min</option>
+              <option value="120">every 2 min</option><option value="300">every 5 min</option>
+            </select>
+            <button data-cmd="trackOn">Start</button>
+            <button data-cmd="trackOff" class="ghost">Stop</button>
+          </div>
+          <div>
+            <h3>Movement alarm</h3>
+            <p class="muted">Alarm after this many movements while parked (1 = most sensitive).</p>
+            <input id="alarmCount" type="number" min="1" max="20" value="2">
+            <button data-cmd="alarm">Save</button>
+            <h3>Speed mode</h3>
+            <p class="muted">Test on a real e-bike first.</p>
+            <select id="speedMode">
+              <option value="1">Low</option><option value="2">Medium</option><option value="3">High</option>
+            </select>
+            <button data-cmd="speed">Set</button>
+          </div>
+          <div>
+            <h3>Route</h3>
+            <input id="routeDay" type="date">
+            <button data-cmd="route">Show on map</button>
+            <h3 class="danger">Remote unlock</h3>
+            <p class="muted">Opens the lock from here. Recorded in the admin log.</p>
+            <button data-cmd="unlock" class="danger-btn">Unlock…</button>
+          </div>
+        </div>
+        <h3>History</h3>
+        <ul id="historyList" class="events"></ul>
+      </div>
+    </section>
+
+    <section id="tab-rides" class="tab" hidden>
+      <div class="card">
+        <div class="row">
+          <label class="inline">From <input id="ridesFrom" type="date"></label>
+          <label class="inline">To <input id="ridesTo" type="date"></label>
+          <button id="ridesCsv" class="ghost">Download CSV</button>
+        </div>
+        <label class="inline"><input id="ridesActive" type="checkbox"> Only rides still open</label>
+        <p id="ridesSum" class="muted"></p>
+        <table>
+          <thead><tr><th>Start</th><th>Rider</th><th>Lock</th><th>Minutes</th><th>km</th><th>CO₂ saved</th><th>Replaced</th><th>Status</th><th></th></tr></thead>
+          <tbody id="rideRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="tab-reports" class="tab" hidden>
+      <div class="card">
+        <label class="inline"><input id="showResolved" type="checkbox"> Show resolved</label>
+        <div id="reportList"></div>
+      </div>
+    </section>
+
+    <section id="tab-users" class="tab" hidden>
+      <div class="card">
+        <input id="userSearch" class="search" placeholder="Search name or email">
+        <table>
+          <thead><tr><th></th><th>Name</th><th>Email</th><th>Role</th><th>Lock</th><th>Phone</th><th></th></tr></thead>
+          <tbody id="userRows"></tbody>
+        </table>
+      </div>
+      <div id="profile" class="card" hidden>
+        <div class="row">
+          <span id="profilePhoto" class="avatar big"></span>
+          <h2 id="profileTitle"></h2>
+          <button id="profileClose" class="ghost small">Close</button>
+        </div>
+        <section class="tiles inner">
+          <div class="tile"><span id="pRides">0</span><small>Rides</small></div>
+          <div class="tile"><span id="pKm">0</span><small>km</small></div>
+          <div class="tile"><span id="pCo2">0</span><small>kg CO₂ saved</small></div>
+          <div class="tile"><span id="pReports">0</span><small>Reports</small></div>
+        </section>
+        <p id="profileInfo" class="muted"></p>
+        <h3>Last rides</h3>
+        <ul id="profileRides" class="events"></ul>
+        <h3>Reports</h3>
+        <ul id="profileReports" class="events"></ul>
+      </div>
+    </section>
+
+    <section id="tab-locks" class="tab" hidden>
+      <div class="card">
+        <div class="row"><h2>Locks</h2><button id="lockAdd">Add lock</button></div>
+        <table>
+          <thead><tr><th>Lock number</th><th>MAC</th><th>IMEI</th><th>BLE key</th><th>Rider</th><th></th></tr></thead>
+          <tbody id="lockRows"></tbody>
+        </table>
+      </div>
+      <form id="lockForm" class="card narrow-card" hidden>
+        <h2 id="lockFormTitle">Add lock</h2>
+        <label>Lock number (QR code) <input id="fLockId" required></label>
+        <label>BLE MAC <input id="fMac" placeholder="8C:59:DD:00:01:AF" required></label>
+        <label>IMEI (for location) <input id="fImei" placeholder="860470063570224"></label>
+        <label>BLE key (optional) <input id="fKey" placeholder="8 characters"></label>
+        <label>Rider <select id="fRider"></select></label>
+        <p id="lockError" class="error"></p>
+        <div class="row">
+          <button type="submit">Save</button>
+          <button type="button" id="lockCancel" class="ghost">Cancel</button>
+          <button type="button" id="lockDelete" class="danger-btn" hidden>Delete lock</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="tab-stats" class="tab" hidden>
+      <section class="tiles">
+        <div class="tile"><span id="sRides">0</span><small>Rides (30 days)</small></div>
+        <div class="tile"><span id="sKm">0</span><small>km (30 days)</small></div>
+        <div class="tile"><span id="sCo2">0</span><small>kg CO₂ saved (30 days)</small></div>
+        <div class="tile"><span id="sRiders">0</span><small>Active riders (30 days)</small></div>
+      </section>
+      <div class="card">
+        <div class="row">
+          <h2 id="dailyTitle">Rides per day</h2>
+          <select id="dailyMetric">
+            <option value="rides">Rides</option><option value="km">km</option><option value="co2">kg CO₂ saved</option>
+          </select>
+          <select id="dailyDays"><option value="14">14 days</option><option value="30" selected>30 days</option></select>
+        </div>
+        <div id="dailyChart" class="chart"></div>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <h2>What the rides replaced</h2>
+          <div id="replacedChart" class="chart"></div>
+        </div>
+        <div class="card">
+          <h2>Ride length</h2>
+          <div id="lengthChart" class="chart"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Alarms per day (30 days)</h2>
+        <div id="alarmChart" class="chart"></div>
+      </div>
+    </section>
+
+    <section id="tab-area" class="tab" hidden>
+      <div id="areaMap" class="map"></div>
+      <form id="areaForm" class="card">
+        <p class="muted">Click the map to move the centre. Riders who unlock outside the area are warned,
+          and bikes outside it are marked in the Bikes tab.</p>
+        <div class="row">
+          <label class="inline"><input id="aEnabled" type="checkbox"> Area switched on</label>
+          <label class="inline">Latitude <input id="aLat" type="number" step="0.000001"></label>
+          <label class="inline">Longitude <input id="aLng" type="number" step="0.000001"></label>
+          <label class="inline">Radius (m) <input id="aRadius" type="number" min="100" step="50"></label>
+          <button type="submit">Save</button>
+        </div>
+      </form>
+    </section>
+
+    <section id="tab-log" class="tab" hidden>
+      <div class="card">
+        <table>
+          <thead><tr><th>When</th><th>Admin</th><th>Action</th><th>Target</th><th>Details</th></tr></thead>
+          <tbody id="logRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="reauth">
+    <form method="dialog">
+      <h2>Confirm it is you</h2>
+      <p id="reauthText" class="muted"></p>
+      <label>Your password <input id="reauthPass" type="password" autocomplete="current-password"></label>
+      <p id="reauthError" class="error"></p>
+      <div class="row">
+        <button id="reauthOk" value="ok">Confirm</button>
+        <button value="cancel" class="ghost" formnovalidate>Cancel</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script type="module" src="app.js?v=20261107n"></script>
+</body>
+</html>
