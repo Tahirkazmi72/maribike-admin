@@ -158,3 +158,10 @@ input.short { display: inline-block; width: auto; margin: 0; }
 @media (max-width: 700px) {
   .notif-panel { position: fixed; left: 16px; right: 16px; top: 64px; width: auto; max-width: none; }
 }
+
+/* messages tab */
+#msgForm textarea { display: block; width: 100%; margin-top: 4px; padding: 9px; border: 1px solid var(--line);
+                    border-radius: 8px; font: inherit; resize: vertical; }
+label.check { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+label.check input { display: inline-block; width: auto; margin: 0; }
+td.msgtext { max-width: 360px; white-space: pre-wrap; }

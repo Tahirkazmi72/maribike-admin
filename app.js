@@ -8,7 +8,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
   getFirestore, collection, doc, getDoc, getDocs, onSnapshot, query, where, orderBy, limit,
-  addDoc, setDoc, updateDoc, runTransaction, serverTimestamp, Timestamp,
+  addDoc, setDoc, updateDoc, deleteDoc, runTransaction, serverTimestamp, Timestamp,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import { firebaseConfig } from "./firebase-config.js";
 
@@ -30,6 +30,7 @@ const alarmsToday = new Map(); // imei -> count
 const markers = new Map();
 let rides = [];
 let reports = [];
+let messages = [];             // messages/{id}: notes and offers to riders
 let area = null;               // settings/geofence
 let stops = [];
 let me = null;
@@ -295,6 +296,11 @@ function start() {
     users.clear();
     snap.docs.forEach((d) => users.set(d.id, d.data()));
     renderBikes(); renderUsers(); renderLocks(); renderRides(); renderReports(); renderProfile();
+    renderMsgTo(); renderMessages();
+  });
+  listen(query(collection(db, "messages"), orderBy("createdAt", "desc"), limit(100)), (snap) => {
+    messages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderMessages();
   });
   listen(query(collection(db, "rides"), orderBy("startAt", "desc"), limit(1000)), (snap) => {
     rides = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -1424,6 +1430,74 @@ function renderLog(entries) {
     rows.append(tr);
   });
 }
+
+// ---------------- messages and offers to riders ----------------
+// messages/{id} = { title, text, to: "all" | uid, push, status, uid (admin), createdAt }.
+// The rider app lists them under the bell. With push, the lock server sends a phone
+// notification and sets status to "sent" with the number of phones (sentTo).
+
+function renderMsgTo() {
+  const sel = $("mTo");
+  const keep = sel.value;
+  sel.replaceChildren(new Option("All riders", "all"));
+  [...users.entries()].sort((a, b) => (a[1].name || a[1].email || "").localeCompare(b[1].name || b[1].email || ""))
+    .forEach(([uid, u]) => sel.append(new Option(`${u.name || "No name"} <${u.email}>`, uid)));
+  sel.value = [...sel.options].some((o) => o.value === keep) ? keep : "all";
+}
+
+function msgPhoneText(m) {
+  if (!m.push) return "no";
+  switch (m.status) {
+    case "pending": return "sending…";
+    case "sent": return `sent to ${m.sentTo ?? 0} phone${m.sentTo === 1 ? "" : "s"}`;
+    case "expired": return "not sent (lock server was off)";
+    default: return m.status || "-";
+  }
+}
+
+function renderMessages() {
+  const rows = $("msgRows");
+  rows.replaceChildren();
+  $("noMsgs").hidden = messages.length > 0;
+  messages.forEach((m) => {
+    const tr = el("tr");
+    const to = m.to === "all" ? "All riders" : (users.get(m.to)?.name || users.get(m.to)?.email || "one rider");
+    const del = el("td");
+    del.append(button("Delete", async () => {
+      if (!confirm(`Delete the message "${m.title}"? Riders will no longer see it.`)) return;
+      try {
+        await deleteDoc(doc(db, "messages", m.id));
+        await logAction("Delete message", to, m.title);
+      } catch (e) { toast(`Could not delete (${e.code || e.message})`); }
+    }, "small ghost"));
+    tr.append(el("td", toDate(m.createdAt)?.toLocaleString() ?? "-"), el("td", to), el("td", m.title || ""),
+      el("td", m.text || "", "msgtext"), el("td", msgPhoneText(m)), del);
+    rows.append(tr);
+  });
+}
+
+$("msgForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("msgError").textContent = "";
+  const to = $("mTo").value || "all";
+  const title = $("mTitle").value.trim();
+  const text = $("mText").value.trim();
+  const push = $("mPush").checked;
+  if (!title || !text) return ($("msgError").textContent = "Write a title and a message.");
+  const who = to === "all" ? "all riders" : (users.get(to)?.name || users.get(to)?.email || "this rider");
+  if (!confirm(`Send "${title}" to ${who}${push ? " as a phone notification too" : ""}?`)) return;
+  try {
+    await addDoc(collection(db, "messages"), {
+      title, text, to, push, status: push ? "pending" : "saved", uid: me.uid, createdAt: serverTimestamp(),
+    });
+    await logAction("Message", who, title);
+    toast(`Message sent to ${who}`, true);
+    $("mTitle").value = "";
+    $("mText").value = "";
+  } catch (err) {
+    $("msgError").textContent = `Could not send (${err.code || err.message}).`;
+  }
+});
 
 // ---------------- tabs ----------------
 
