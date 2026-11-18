@@ -283,10 +283,10 @@
     <section id="tab-messages" class="tab" hidden>
       <form id="msgForm" class="card narrow-card">
         <h2>Send a message</h2>
-        <p class="muted">The rider sees it under the bell in the app. With the box ticked it also arrives on the phone as a notification.</p>
+        <p class="muted">The rider sees it under the bell in the app. With the box ticked it also arrives on the phone as a notification. Web links (https://…) can be tapped in the app.</p>
         <label>To <select id="mTo"></select></label>
         <label>Title <input id="mTitle" maxlength="80" required placeholder="20% off in the shop this week"></label>
-        <label>Message <textarea id="mText" maxlength="500" rows="4" required placeholder="Show this message in the shop until Sunday."></textarea></label>
+        <label>Message <textarea id="mText" maxlength="500" rows="4" required placeholder="Show this message in the shop until Sunday: https://marketstore.pt"></textarea></label>
         <label class="check"><input id="mPush" type="checkbox" checked> Also send as a phone notification</label>
         <p id="msgError" class="error"></p>
         <button type="submit">Send</button>
