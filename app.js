@@ -320,8 +320,8 @@ function start() {
   });
 }
 
-const FALL_REMIND_MS = 6 * 3600 * 1000;
-const fallTold = new Map(); // imei -> when the admin was last alerted that it fell
+// "fall" is off everywhere (the lock reports it wrongly); it stays only in the bike's event list
+const isAlert = (e) => e.event === "alarm" && e.alarm !== "fall" && !String(e.alarm || "").endsWith("_cleared");
 
 /** Counts today's alarms of one bike and pops up a message for new ones. */
 function watchAlarms(imei) {
@@ -329,27 +329,16 @@ function watchAlarms(imei) {
   const q = query(collection(db, "iot_locks", imei, "events"), where("at", ">=", Timestamp.fromDate(midnight)));
   let first = true;
   stops.push(onSnapshot(q, (snap) => {
-    alarmsToday.set(imei, snap.docs.filter((d) => d.data().event === "alarm").length);
+    alarmsToday.set(imei, snap.docs.filter((d) => isAlert(d.data())).length);
     for (const [id, f] of alarmFeed) if (f.imei === imei) alarmFeed.delete(id);
     snap.docs.forEach((d) => {
       const e = d.data();
-      if (e.event === "alarm" && !String(e.alarm || "").endsWith("_cleared")) {
-        alarmFeed.set(d.id, { imei, alarm: e.alarm, at: toDate(e.at) || new Date() });
-      }
+      if (isAlert(e)) alarmFeed.set(d.id, { imei, alarm: e.alarm, at: toDate(e.at) || new Date() });
     });
     renderFeed();
     if (!first) {
       snap.docChanges().forEach((c) => {
-        if (c.type !== "added") return;
-        const e = c.doc.data();
-        // same rule as the lock server: a lock lying on its side repeats "fall" every 30 min
-        if (e.alarm === "fall_cleared" || e.event === "locked" || e.event === "unlocked") fallTold.delete(imei);
-        if (e.event !== "alarm" || e.alarm === "fall_cleared" || e.alarm === "dismantle_cleared") return;
-        if (e.alarm === "fall") {
-          if (Date.now() - (fallTold.get(imei) || 0) < FALL_REMIND_MS) return;
-          fallTold.set(imei, Date.now());
-        }
-        alarmAlert(imei, e.alarm);
+        if (c.type === "added" && isAlert(c.doc.data())) alarmAlert(imei, c.doc.data().alarm);
       });
     }
     first = false;
